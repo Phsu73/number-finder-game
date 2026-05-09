@@ -1,0 +1,17 @@
+{
+  "name": "fast-number-finder-online",
+  "version": "1.0.0",
+  "description": "Real-time online multiplayer number finder game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["game", "multiplayer", "socket.io", "express"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
+}

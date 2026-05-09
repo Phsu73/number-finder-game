@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Number Finder Multiplayer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="bg-gray-900 min-h-screen">
+    <div class="container mx-auto p-4">
+
+        <!-- LOBBY SCREEN -->
+        <div id="lobby-screen" class="lobby-screen">
+            <div class="max-w-md mx-auto bg-gray-800 rounded-lg border-4 border-black p-8 shadow-2xl">
+                <h1 class="text-4xl font-bold text-center text-white mb-8">Number Finder Multiplayer</h1>
+
+                <!-- Connection Status -->
+                <div id="connection-status" class="text-center mb-6">
+                    <span id="connection-text" class="text-yellow-400">Connecting to server...</span>
+                </div>
+
+                <!-- Create Room Section -->
+                <div class="mb-8">
+                    <button
+                        id="create-room-btn"
+                        class="w-full px-6 py-4 bg-green-600 text-white font-bold text-xl border-2 border-black rounded-lg hover:bg-green-700 transition transform hover:scale-105"
+                    >
+                        🎮 Create Room
+                    </button>
+                </div>
+
+                <!-- Divider -->
+                <div class="flex items-center mb-8">
+                    <div class="flex-grow border-t-2 border-gray-600"></div>
+                    <span class="px-4 text-gray-400 font-semibold">OR</span>
+                    <div class="flex-grow border-t-2 border-gray-600"></div>
+                </div>
+
+                <!-- Join Room Section -->
+                <div>
+                    <label class="block text-white font-semibold mb-2">Join Room with Code:</label>
+                    <div class="flex gap-2">
+                        <input
+                            type="text"
+                            id="room-code-input"
+                            class="flex-1 px-4 py-3 border-2 border-black rounded-lg bg-gray-700 text-white text-center text-2xl font-mono uppercase"
+                            placeholder="ABCD"
+                            maxlength="4"
+                        >
+                        <button
+                            id="join-room-btn"
+                            class="px-6 py-3 bg-blue-600 text-white font-bold text-lg border-2 border-black rounded-lg hover:bg-blue-700 transition"
+                        >
+                            Join
+                        </button>
+                    </div>
+                    <p class="text-gray-400 text-sm mt-2">Enter the 4-character room code</p>
+                </div>
+
+                <!-- Error Messages -->
+                <div id="error-message" class="hidden mt-4 p-3 bg-red-900 border-2 border-red-700 rounded-lg">
+                    <p class="text-red-300 text-center"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- GAME SCREEN -->
+        <div id="game-screen" class="game-screen hidden">
+            <!-- Game Header -->
+            <div class="mb-4">
+                <h1 class="text-3xl font-bold text-center text-white mb-2">Number Finder Multiplayer</h1>
+                <div id="game-header" class="text-center">
+                    <div class="inline-block bg-gray-800 px-6 py-3 rounded-lg border-2 border-black">
+                        <span class="text-white">Room: </span>
+                        <span id="room-code-display" class="text-green-400 font-bold text-2xl font-mono"></span>
+                        <span id="game-status" class="text-yellow-400 ml-4"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Container -->
+            <div class="game-container flex gap-0 border-4 border-black">
+
+                <!-- Player 1 Column -->
+                <div class="player-column w-1/4 border-r-4 border-black bg-gray-800">
+                    <div class="player-header bg-blue-900 p-4 border-b-4 border-black">
+                        <h2 class="text-xl font-bold text-white">Player 1</h2>
+                        <div id="timer1" class="text-3xl font-mono text-yellow-400 mt-2">03:00</div>
+                    </div>
+                    <div class="guess-history p-4 h-64 overflow-y-auto border-b-4 border-black">
+                        <h3 class="text-white font-semibold mb-2">Guess History:</h3>
+                        <ul id="history1" class="text-green-400 space-y-1"></ul>
+                    </div>
+                    <div class="input-area p-4">
+                        <div class="flex gap-2">
+                            <input
+                                type="number"
+                                id="input1"
+                                class="flex-1 px-3 py-2 border-2 border-black rounded bg-gray-700 text-white"
+                                placeholder="Enter number..."
+                                min="1"
+                                max="100"
+                            >
+                            <button
+                                id="submit1"
+                                class="px-4 py-2 bg-blue-600 text-white font-bold border-2 border-black rounded hover:bg-blue-700 transition"
+                            >
+                                Submit
+                            </button>
+                        </div>
+                        <p id="turn1" class="text-yellow-400 text-sm mt-2">Your turn to challenge!</p>
+                    </div>
+                </div>
+
+                <!-- Game Board Column -->
+                <div class="game-board w-1/2 border-r-4 border-black bg-gray-700 relative">
+                    <div class="bg-gray-800 border-b-4 border-black">
+                        <h2 class="text-center text-xl font-bold text-white py-2">Game Board</h2>
+                        <div class="text-center text-sm text-gray-300 pb-2">
+                            Found: <span id="foundCount">0</span> / 100
+                        </div>
+                    </div>
+                    <div id="numberContainer" class="number-container relative h-[500px] overflow-hidden">
+                        <!-- Numbers will be generated here -->
+                    </div>
+
+                    <!-- Waiting Message -->
+                    <div id="waiting-message" class="hidden absolute inset-0 flex items-center justify-center bg-gray-700 bg-opacity-95">
+                        <div class="text-center">
+                            <h2 class="text-3xl font-bold text-white mb-4">Waiting for Player 2</h2>
+                            <p class="text-gray-300 mb-2">Share this room code with your friend:</p>
+                            <p id="share-code" class="text-green-400 text-5xl font-bold font-mono mb-4"></p>
+                            <button
+                                id="copy-code-btn"
+                                class="px-6 py-3 bg-blue-600 text-white font-bold border-2 border-black rounded-lg hover:bg-blue-700 transition"
+                            >
+                                📋 Copy Code
+                            </button>
+                            <p class="text-yellow-400 text-sm mt-4 animate-pulse">Waiting for connection...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Player 2 Column -->
+                <div class="player-column w-1/4 bg-gray-800">
+                    <div class="player-header bg-red-900 p-4 border-b-4 border-black">
+                        <h2 class="text-xl font-bold text-white">Player 2</h2>
+                        <div id="timer2" class="text-3xl font-mono text-yellow-400 mt-2">03:00</div>
+                    </div>
+                    <div class="guess-history p-4 h-64 overflow-y-auto border-b-4 border-black">
+                        <h3 class="text-white font-semibold mb-2">Guess History:</h3>
+                        <ul id="history2" class="text-green-400 space-y-1"></ul>
+                    </div>
+                    <div class="input-area p-4">
+                        <div class="flex gap-2">
+                            <input
+                                type="number"
+                                id="input2"
+                                class="flex-1 px-3 py-2 border-2 border-black rounded bg-gray-700 text-white"
+                                placeholder="Enter number..."
+                                min="1"
+                                max="100"
+                            >
+                            <button
+                                id="submit2"
+                                class="px-4 py-2 bg-red-600 text-white font-bold border-2 border-black rounded hover:bg-red-700 transition"
+                            >
+                                Submit
+                            </button>
+                        </div>
+                        <p id="turn2" class="text-yellow-400 text-sm mt-2">Wait for your turn!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Over Modal -->
+            <div id="gameOverModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                <div class="bg-gray-800 p-8 rounded-lg border-4 border-black text-center">
+                    <h2 id="winnerText" class="text-4xl font-bold text-white mb-4"></h2>
+                    <p id="loserText" class="text-2xl text-red-400 mb-6"></p>
+                    <button
+                        id="playAgain"
+                        class="px-6 py-3 bg-green-600 text-white font-bold text-xl border-2 border-black rounded hover:bg-green-700 transition"
+                    >
+                        Play Again
+                    </button>
+                </div>
+            </div>
+
+            <!-- Disconnection Modal -->
+            <div id="disconnectModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                <div class="bg-gray-800 p-8 rounded-lg border-4 border-black text-center">
+                    <h2 class="text-3xl font-bold text-red-400 mb-4">Partner Disconnected</h2>
+                    <p class="text-gray-300 mb-6">Your partner has disconnected. The game is paused.</p>
+                    <div class="animate-pulse text-yellow-400">Waiting for reconnection...</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

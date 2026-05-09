@@ -1,0 +1,227 @@
+/* Custom Styles for Number Finder Multiplayer */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Screen Toggle */
+.lobby-screen {
+    display: block;
+}
+
+.lobby-screen.hidden {
+    display: none;
+}
+
+.game-screen {
+    display: none;
+}
+
+.game-screen:not(.hidden) {
+    display: block;
+}
+
+/* Lobby Styles */
+.lobby-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#connection-status {
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+}
+
+#connection-text {
+    font-weight: 600;
+}
+
+#room-code-input {
+    letter-spacing: 0.25em;
+    font-weight: bold;
+}
+
+#room-code-input::placeholder {
+    letter-spacing: normal;
+    font-weight: normal;
+    opacity: 0.5;
+}
+
+#error-message {
+    animation: shake 0.5s;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    75% { transform: translateX(10px); }
+}
+
+/* Game Container */
+.game-container {
+    height: 650px;
+}
+
+.player-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.player-header {
+    text-align: center;
+}
+
+.guess-history {
+    flex-grow: 1;
+}
+
+.guess-history ul {
+    list-style: none;
+    padding: 0;
+}
+
+.guess-history li {
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.input-area {
+    flex-shrink: 0;
+}
+
+.number-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.number-item {
+    position: absolute;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    user-select: none;
+    border: 2px solid black;
+    z-index: 1;
+}
+
+.number-item:not(.found):hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+}
+
+.number-item.found {
+    opacity: 0.2;
+    cursor: not-allowed;
+    background: #1a1a1a !important;
+    color: #444 !important;
+    transform: scale(0.8);
+}
+
+.number-item.wrong-click {
+    animation: shake 0.5s;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.input-area input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.input-area button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Scrollbar styling */
+.guess-history::-webkit-scrollbar {
+    width: 8px;
+}
+
+.guess-history::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+.guess-history::-webkit-scrollbar-thumb {
+    background: #4b5563;
+    border-radius: 4px;
+}
+
+.guess-history::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* Special styling for clip-path shapes */
+.number-item[style*="clip-path"] {
+    border: none !important;
+    box-shadow: 0 0 0 2px black;
+}
+
+.number-item[style*="clip-path"]:hover {
+    box-shadow: 0 0 0 3px black, 0 0 15px rgba(255, 255, 255, 0.5);
+}
+
+/* Game Over Modal styling */
+#gameOverModal .bg-gray-800 {
+    min-width: 400px;
+    max-width: 600px;
+}
+
+#winnerText {
+    margin-bottom: 1rem;
+}
+
+#loserText {
+    line-height: 1.8;
+    margin-bottom: 1.5rem;
+}
+
+/* Waiting Message */
+#waiting-message {
+    z-index: 10;
+}
+
+#share-code {
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .game-container {
+        height: auto;
+        flex-direction: column;
+    }
+
+    .player-column {
+        width: 100%;
+        border-right: none;
+        border-bottom: 4px solid black;
+    }
+
+    .game-board {
+        width: 100%;
+        height: 400px;
+    }
+
+    .number-container {
+        height: 350px;
+    }
+}
