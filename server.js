@@ -11,7 +11,36 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
 // Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
+const publicPath = path.join(__dirname, 'public');
+const fs = require('fs');
+
+console.log('[SERVER] Public files path:', publicPath);
+
+// Check if public directory exists
+if (!fs.existsSync(publicPath)) {
+    console.error('[SERVER] ERROR: Public directory not found at:', publicPath);
+    console.error('[SERVER] Please ensure the public directory exists with your frontend files.');
+} else {
+    console.log('[SERVER] ✓ Public directory found');
+
+    // Check if index.html exists
+    const indexPath = path.join(publicPath, 'index.html');
+    if (!fs.existsSync(indexPath)) {
+        console.error('[SERVER] ERROR: index.html not found at:', indexPath);
+    } else {
+        console.log('[SERVER] ✓ index.html found');
+    }
+
+    // List files in public directory
+    try {
+        const files = fs.readdirSync(publicPath);
+        console.log('[SERVER] Files in public directory:', files);
+    } catch (err) {
+        console.error('[SERVER] Error reading public directory:', err);
+    }
+}
+
+app.use(express.static(publicPath));
 
 // Room management
 const rooms = new Map();
@@ -525,13 +554,7 @@ function endGame(roomId, loser) {
     });
 }
 
-// Serve main page
-app.get('/', (req, res) => {
-    console.log('[SERVER] Serving index.html');
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Health check endpoint
+// Health check endpoint (must be before fallback route)
 app.get('/health', (req, res) => {
     const roomInfo = [];
     rooms.forEach((room, roomId) => {
@@ -551,6 +574,33 @@ app.get('/health', (req, res) => {
         activeRooms: roomInfo.length,
         rooms: roomInfo,
         timestamp: new Date().toISOString()
+    });
+});
+
+// Serve main page
+app.get('/', (req, res) => {
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    console.log('[SERVER] Serving index.html from:', indexPath);
+
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error('[SERVER] Error serving index.html:', err);
+            res.status(404).send('Error loading page. Please check if the files are correctly deployed.');
+        } else {
+            console.log('[SERVER] Successfully served index.html');
+        }
+    });
+});
+
+// Fallback route for SPA (Single Page Application) support
+app.get('*', (req, res) => {
+    console.log('[SERVER] Fallback route for:', req.originalUrl);
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    res.sendFile(indexPath, (err) => {
+        if (err) {
+            console.error('[SERVER] Error serving fallback index.html:', err);
+            res.status(404).send('Page not found');
+        }
     });
 });
 

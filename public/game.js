@@ -1,6 +1,13 @@
-// Number Finder Multiplayer - Lobby System Client
+// Number Finder Multiplayer - Lobby System Client with Local Offline Mode
 
-// Socket connection
+// =============================================
+// GLOBAL STATE MANAGEMENT
+// =============================================
+
+// Game mode flag
+const isOfflineMode = false; // Will be set to true when local offline mode is selected
+
+// Socket connection (only used in online mode)
 const socket = io();
 
 // Client state
@@ -8,7 +15,40 @@ const clientState = {
     playerNumber: null,
     roomId: null,
     isConnected: false,
-    isMyTurn: false
+    isMyTurn: false,
+    isOfflineMode: false
+};
+
+// Local offline game state
+const localGameState = {
+    numbers: [],
+    foundNumbers: new Set(),
+    currentTurn: 1, // Player 1 starts
+    targetNumber: null,
+    timers: {
+        player1: 180,
+        player2: 180
+    },
+    isRunning: false,
+    player1History: [],
+    player2History: [],
+    timerIntervals: {
+        player1: null,
+        player2: null
+    }
+};
+
+// Current game state (synced with server in online mode)
+let currentGameState = {
+    numbers: [],
+    foundNumbers: new Set(),
+    currentTurn: 1,
+    targetNumber: null,
+    timers: {
+        player1: 180,
+        player2: 180
+    },
+    isRunning: false
 };
 
 // DOM Elements
@@ -18,6 +58,7 @@ const elements = {
     gameScreen: document.getElementById('game-screen'),
     connectionText: document.getElementById('connection-text'),
     createRoomBtn: document.getElementById('create-room-btn'),
+    localOfflineBtn: document.getElementById('local-offline-btn'),
     joinRoomBtn: document.getElementById('join-room-btn'),
     roomCodeInput: document.getElementById('room-code-input'),
     errorMessage: document.getElementById('error-message'),
@@ -47,19 +88,6 @@ const elements = {
     disconnectModal: document.getElementById('disconnectModal')
 };
 
-// Current game state (synced with server)
-let currentGameState = {
-    numbers: [],
-    foundNumbers: new Set(),
-    currentTurn: 1,
-    targetNumber: null,
-    timers: {
-        player1: 180,
-        player2: 180
-    },
-    isRunning: false
-};
-
 // =============================================
 // SCREEN MANAGEMENT
 // =============================================
@@ -77,7 +105,394 @@ function showGameScreen() {
 }
 
 // =============================================
-// SOCKET EVENT HANDLERS
+// LOCAL OFFLINE MODE FUNCTIONS
+// =============================================
+
+function startLocalOfflineMode() {
+    console.log('[LOCAL] Starting local offline mode');
+    clientState.isOfflineMode = true;
+    clientState.playerNumber = 'observer'; // In local mode, we observe both players
+
+    // Generate local game board
+    localGameState.numbers = generateLocalGameBoard();
+    localGameState.foundNumbers.clear();
+    localGameState.currentTurn = 1;
+    localGameState.targetNumber = null;
+    localGameState.timers = { player1: 180, player2: 180 };
+    localGameState.isRunning = true;
+    localGameState.player1History = [];
+    localGameState.player2History = [];
+
+    // Clear UI
+    elements.numberContainer.innerHTML = '';
+    elements.history1.innerHTML = '';
+    elements.history2.innerHTML = '';
+    elements.foundCount.textContent = '0';
+
+    // Switch to game screen
+    showGameScreen();
+
+    // Update UI for local mode
+    elements.roomCodeDisplay.textContent = 'LOCAL';
+    elements.gameStatus.textContent = '(2 Players - Same Screen)';
+
+    // Hide waiting message
+    elements.waitingMessage.classList.add('hidden');
+
+    // Display numbers
+    displayNumbers(localGameState.numbers);
+
+    // Update displays
+    updateLocalTimerDisplay();
+    updateLocalTurnIndicators();
+
+    console.log('[LOCAL] Local offline mode started successfully');
+}
+
+function generateLocalGameBoard() {
+    console.log('[LOCAL] Generating local game board...');
+    const numbers = [];
+    const ballColors = [
+        '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6',
+        '#8b5cf6', '#ec4899', '#14b8a6', '#f59e0b', '#6366f1'
+    ];
+
+    const shapes = [
+        { name: 'circle', style: 'border-radius: 50%;' },
+        { name: 'square', style: 'border-radius: 0;' },
+        { name: 'rounded', style: 'border-radius: 8px;' },
+        { name: 'diamond', style: 'clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);' },
+        { name: 'triangle', style: 'clip-path: polygon(50% 0%, 0% 100%, 100% 100%);' },
+        { name: 'hexagon', style: 'clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);' },
+        { name: 'pentagon', style: 'clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);' },
+        { name: 'star', style: 'clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);' }
+    ];
+
+    for (let i = 1; i <= 100; i++) {
+        const top = Math.random() * 94 + 3;
+        const left = Math.random() * 94 + 3;
+        const color = ballColors[i % ballColors.length];
+        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+        const zIndex = Math.floor(Math.random() * 10);
+
+        numbers.push({
+            number: i,
+            top: top,
+            left: left,
+            backgroundColor: color,
+            shapeStyle: shape.style,
+            shapeName: shape.name,
+            zIndex: zIndex
+        });
+    }
+
+    console.log(`[LOCAL] Generated ${numbers.length} numbers`);
+    return numbers;
+}
+
+function handleLocalNumberSubmit(playerNum) {
+    if (!localGameState.isRunning) return;
+
+    const input = playerNum === 1 ? elements.input1 : elements.input2;
+    const number = parseInt(input.value);
+
+    // Validation
+    if (isNaN(number)) {
+        alert('Please enter a valid number!');
+        return;
+    }
+
+    if (number < 1 || number > 100) {
+        alert('Please enter a number between 1 and 100!');
+        return;
+    }
+
+    if (localGameState.foundNumbers.has(number)) {
+        alert('This number has already been found! Choose another number.');
+        return;
+    }
+
+    // Check if it's this player's turn to challenge
+    if (playerNum !== localGameState.currentTurn) {
+        alert("It's not your turn!");
+        return;
+    }
+
+    console.log(`[LOCAL] Player ${playerNum} submitted number ${number}`);
+
+    // Add to challenger's history
+    const historyElement = playerNum === 1 ? localGameState.player1History : localGameState.player2History;
+    historyElement.push({ number, type: 'challenger' });
+    addToHistory(playerNum === 1 ? elements.history1 : elements.history2, number, 'challenger');
+
+    // Set target number
+    localGameState.targetNumber = number;
+
+    // Switch turns (finder becomes the other player)
+    localGameState.currentTurn = playerNum === 1 ? 2 : 1;
+
+    // Start finder's timer
+    startLocalTimer(localGameState.currentTurn);
+
+    // Update displays
+    updateLocalTimerDisplay();
+    updateLocalTurnIndicators();
+
+    // Clear input
+    input.value = '';
+}
+
+function handleLocalNumberClick(clickedNumber) {
+    if (!localGameState.isRunning) return;
+
+    // Check if there's a target number to find
+    if (localGameState.targetNumber === null) return;
+
+    const finder = localGameState.currentTurn;
+
+    console.log(`[LOCAL] Player ${finder} clicked number ${clickedNumber}`);
+
+    // Check if correct number
+    if (clickedNumber === localGameState.targetNumber) {
+        console.log(`[LOCAL] Player ${finder} found the correct number ${clickedNumber}!`);
+
+        // Add to finder's history
+        const historyElement = finder === 1 ? localGameState.player1History : localGameState.player2History;
+        historyElement.push({ number: clickedNumber, type: 'finder' });
+        addToHistory(finder === 1 ? elements.history1 : elements.history2, clickedNumber, 'finder');
+
+        // Mark as found
+        localGameState.foundNumbers.add(clickedNumber);
+
+        // Remove the number from display
+        const ballElement = document.querySelector(`[data-number="${clickedNumber}"]`);
+        if (ballElement) {
+            ballElement.classList.add('found');
+        }
+
+        // Update found count
+        elements.foundCount.textContent = localGameState.foundNumbers.size;
+
+        // Stop finder's timer
+        stopLocalTimer(finder);
+
+        // Finder becomes challenger next - keep turn with finder
+        localGameState.targetNumber = null;
+
+        // Update displays
+        updateLocalTimerDisplay();
+        updateLocalTurnIndicators();
+
+        // Check if all numbers found
+        if (localGameState.foundNumbers.size === 100) {
+            endLocalGame(null); // All numbers found
+        }
+    } else {
+        // Wrong click - show visual feedback
+        const ballElement = document.querySelector(`[data-number="${clickedNumber}"]`);
+        if (ballElement) {
+            ballElement.classList.add('wrong-click');
+            setTimeout(() => {
+                ballElement.classList.remove('wrong-click');
+            }, 500);
+        }
+    }
+}
+
+function startLocalTimer(player) {
+    const timerKey = player === 1 ? 'player1' : 'player2';
+
+    // Clear any existing timer
+    if (localGameState.timerIntervals[timerKey]) {
+        clearInterval(localGameState.timerIntervals[timerKey]);
+    }
+
+    localGameState.timerIntervals[timerKey] = setInterval(() => {
+        localGameState.timers[timerKey]--;
+
+        // Update display
+        updateLocalTimerDisplay();
+
+        // Check if time ran out
+        if (localGameState.timers[timerKey] <= 0) {
+            stopLocalTimer(player);
+            endLocalGame(player);
+        }
+    }, 1000);
+}
+
+function stopLocalTimer(player) {
+    const timerKey = player === 1 ? 'player1' : 'player2';
+    if (localGameState.timerIntervals[timerKey]) {
+        clearInterval(localGameState.timerIntervals[timerKey]);
+        localGameState.timerIntervals[timerKey] = null;
+    }
+}
+
+function updateLocalTimerDisplay() {
+    const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    elements.timer1.textContent = formatTime(localGameState.timers.player1);
+    elements.timer2.textContent = formatTime(localGameState.timers.player2);
+
+    // Add warning color when time is low
+    if (localGameState.timers.player1 <= 30) {
+        elements.timer1.classList.add('text-red-500');
+        elements.timer1.classList.remove('text-yellow-400');
+    } else {
+        elements.timer1.classList.remove('text-red-500');
+        elements.timer1.classList.add('text-yellow-400');
+    }
+
+    if (localGameState.timers.player2 <= 30) {
+        elements.timer2.classList.add('text-red-500');
+        elements.timer2.classList.remove('text-yellow-400');
+    } else {
+        elements.timer2.classList.remove('text-red-500');
+        elements.timer2.classList.add('text-yellow-400');
+    }
+}
+
+function updateLocalTurnIndicators() {
+    const isPlayer1Turn = localGameState.currentTurn === 1;
+    const isPlayer1Challenger = isPlayer1Turn && localGameState.targetNumber === null;
+    const isPlayer2Challenger = !isPlayer1Turn && localGameState.targetNumber === null;
+
+    // Update Player 1 section
+    if (isPlayer1Challenger) {
+        elements.turn1.textContent = 'Player 1: Your turn to challenge!';
+        elements.input1.disabled = false;
+        elements.submit1.disabled = false;
+    } else if (isPlayer1Turn) {
+        elements.turn1.textContent = 'Player 1: Find Player 2\'s number...';
+        elements.input1.disabled = true;
+        elements.submit1.disabled = true;
+    } else {
+        elements.turn1.textContent = localGameState.targetNumber ?
+            `Player 1: Find number ${localGameState.targetNumber}!` :
+            "Player 1: Wait for your turn!";
+        elements.input1.disabled = true;
+        elements.submit1.disabled = true;
+    }
+
+    // Update Player 2 section
+    if (isPlayer2Challenger) {
+        elements.turn2.textContent = 'Player 2: Your turn to challenge!';
+        elements.input2.disabled = false;
+        elements.submit2.disabled = false;
+    } else if (!isPlayer1Turn) {
+        elements.turn2.textContent = 'Player 2: Find Player 1\'s number...';
+        elements.input2.disabled = true;
+        elements.submit2.disabled = true;
+    } else {
+        elements.turn2.textContent = localGameState.targetNumber ?
+            `Player 2: Find number ${localGameState.targetNumber}!` :
+            "Player 2: Wait for your turn!";
+        elements.input2.disabled = true;
+        elements.submit2.disabled = true;
+    }
+}
+
+function endLocalGame(loser) {
+    console.log(`[LOCAL] Game ended. Loser: Player ${loser}`);
+
+    localGameState.isRunning = false;
+
+    // Stop all timers
+    stopLocalTimer(1);
+    stopLocalTimer(2);
+
+    // Determine winner
+    let winner, winReason;
+    if (loser === null) {
+        // All numbers found - player with more time remaining wins
+        if (localGameState.timers.player1 > localGameState.timers.player2) {
+            winner = 1;
+            winReason = 'Player 2 spent more time searching!';
+        } else if (localGameState.timers.player2 > localGameState.timers.player1) {
+            winner = 2;
+            winReason = 'Player 1 spent more time searching!';
+        } else {
+            winner = null; // Tie
+            winReason = 'Both players have the same time remaining!';
+        }
+    } else {
+        // A player ran out of time
+        winner = loser === 1 ? 2 : 1;
+        winReason = `Player ${loser} ran out of time!`;
+    }
+
+    // Display both players' history
+    displayHistory(elements.history1, localGameState.player1History);
+    displayHistory(elements.history2, localGameState.player2History);
+
+    // Format final times
+    const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const p1Time = formatTime(localGameState.timers.player1);
+    const p2Time = formatTime(localGameState.timers.player2);
+
+    // Show game over modal
+    if (winner === null) {
+        // Tie
+        elements.winnerText.textContent = "🤝 It's a Tie! 🤝";
+        elements.winnerText.className = 'text-4xl font-bold text-green-400 mb-4';
+        elements.loserText.innerHTML = `${winReason}<br><br>
+            <span class="text-lg">Final Times:<br>
+            Player 1: ${p1Time} remaining<br>
+            Player 2: ${p2Time} remaining</span>`;
+    } else {
+        elements.winnerText.textContent = `🏆 Player ${winner} Wins! 🏆`;
+        elements.winnerText.className = `text-4xl font-bold ${winner === 1 ? 'text-blue-400' : 'text-red-400'} mb-4`;
+        elements.loserText.innerHTML = `${winReason}<br><br>
+            <span class="text-lg">Final Times:<br>
+            Player 1: ${p1Time} remaining<br>
+            Player 2: ${p2Time} remaining</span>`;
+    }
+
+    elements.gameOverModal.classList.remove('hidden');
+}
+
+function restartLocalGame() {
+    console.log('[LOCAL] Restarting local game');
+
+    // Reset game state
+    localGameState.numbers = generateLocalGameBoard();
+    localGameState.foundNumbers.clear();
+    localGameState.currentTurn = 1;
+    localGameState.targetNumber = null;
+    localGameState.timers = { player1: 180, player2: 180 };
+    localGameState.isRunning = true;
+    localGameState.player1History = [];
+    localGameState.player2History = [];
+
+    // Clear UI
+    elements.numberContainer.innerHTML = '';
+    elements.history1.innerHTML = '';
+    elements.history2.innerHTML = '';
+    elements.foundCount.textContent = '0';
+
+    // Hide game over modal
+    elements.gameOverModal.classList.add('hidden');
+
+    // Display new numbers
+    displayNumbers(localGameState.numbers);
+
+    // Update displays
+    updateLocalTimerDisplay();
+    updateLocalTurnIndicators();
+}
+
+// =============================================
+// SOCKET EVENT HANDLERS (ONLINE MODE)
 // =============================================
 
 socket.on('connect', () => {
@@ -101,7 +516,7 @@ socket.on('reconnect', () => {
     clientState.isConnected = true;
 
     // Try to rejoin room if we were in one
-    if (clientState.roomId && clientState.playerNumber) {
+    if (clientState.roomId && clientState.playerNumber && !clientState.isOfflineMode) {
         console.log('[LOBBY] Attempting to rejoin room:', clientState.roomId);
         socket.emit('joinRoom', clientState.roomId);
     }
@@ -418,6 +833,12 @@ elements.createRoomBtn.addEventListener('click', () => {
     socket.emit('createRoom');
 });
 
+elements.localOfflineBtn.addEventListener('click', () => {
+    console.log('[LOBBY] Local offline button clicked');
+    clearError();
+    startLocalOfflineMode();
+});
+
 elements.joinRoomBtn.addEventListener('click', () => {
     if (!clientState.isConnected) {
         showError('Not connected to server. Please wait...');
@@ -472,24 +893,53 @@ elements.copyCodeBtn.addEventListener('click', () => {
 // GAME EVENT HANDLERS
 // =============================================
 
-elements.submit1.addEventListener('click', () => handleNumberSubmit());
-elements.submit2.addEventListener('click', () => handleNumberSubmit());
+elements.submit1.addEventListener('click', () => {
+    if (clientState.isOfflineMode) {
+        handleLocalNumberSubmit(1);
+    } else {
+        handleNumberSubmit();
+    }
+});
+
+elements.submit2.addEventListener('click', () => {
+    if (clientState.isOfflineMode) {
+        handleLocalNumberSubmit(2);
+    } else {
+        handleNumberSubmit();
+    }
+});
 
 elements.input1.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleNumberSubmit();
+    if (e.key === 'Enter') {
+        if (clientState.isOfflineMode) {
+            handleLocalNumberSubmit(1);
+        } else {
+            handleNumberSubmit();
+        }
+    }
 });
 
 elements.input2.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleNumberSubmit();
+    if (e.key === 'Enter') {
+        if (clientState.isOfflineMode) {
+            handleLocalNumberSubmit(2);
+        } else {
+            handleNumberSubmit();
+        }
+    }
 });
 
 elements.playAgain.addEventListener('click', () => {
     console.log('[GAME] Play again clicked');
-    socket.emit('playAgain', { roomId: clientState.roomId });
+    if (clientState.isOfflineMode) {
+        restartLocalGame();
+    } else {
+        socket.emit('playAgain', { roomId: clientState.roomId });
+    }
 });
 
 // =============================================
-// GAME FUNCTIONS
+// GAME FUNCTIONS (SHARED)
 // =============================================
 
 function displayNumbers(numbers) {
@@ -515,7 +965,13 @@ function displayNumbers(numbers) {
             ball.dataset.shape = numData.shapeName;
 
             // Add click handler
-            ball.addEventListener('click', () => handleNumberClick(numData.number));
+            ball.addEventListener('click', () => {
+                if (clientState.isOfflineMode) {
+                    handleLocalNumberClick(numData.number);
+                } else {
+                    handleNumberClick(numData.number);
+                }
+            });
 
             elements.numberContainer.appendChild(ball);
             successCount++;
@@ -716,4 +1172,5 @@ function clearError() {
 // =============================================
 
 console.log('[CLIENT] Number Finder Multiplayer - Lobby System Loaded');
+console.log('[CLIENT] Both Online and Local Offline modes available');
 console.log('[CLIENT] Waiting for user action in lobby...');
